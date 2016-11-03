@@ -4,18 +4,23 @@
 git clone https://github.com/aas-integration/clusterer.git
 cd clusterer
 gradle jar
-java -jar build/libs/clusterer.jar build/classes/
+java -jar build/libs/clusterer.jar -dirs build/classes/main
 ```
 Then look at the produced json files to see the clustering.
 
 ## Usage
 
-sootwrapper.ClusterGenerateor takes as argument a directory 
-that contains a set of directories for soot and an optional class path.
+The jar takes the following args:
+```
+ -cp VAL        : Classpath (optional)
+ -cs N          : Clustering strategy between 1 and 4. Default is 3. (default:
+                  3)
+ -dirs STRING[] : List of directories of classdirs to be passed to soot.
+ -out VAL       : Output file name. Default: clusters.json (default:
+                  clusters.json)
+```
 
-It iterates over all directories in the given directory and adds
-them to the soot ProcessPath. That is, if there is any subdirectory 
-(e.g, DS_store) that cannot be handled by soot, the whole thing may crash.
+
 
 ## Output
 
