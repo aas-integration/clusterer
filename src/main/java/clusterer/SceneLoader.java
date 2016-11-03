@@ -1,4 +1,4 @@
-package sootwrapper;
+package clusterer;
 
 import java.io.File;
 import java.util.LinkedList;

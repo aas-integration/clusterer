@@ -14,9 +14,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import clusterer.SceneLoader;
 import soot.Scene;
 import soot.SootClass;
-import sootwrapper.SceneLoader;
 
 /**
  * @author schaef
