@@ -32,9 +32,9 @@ dependencies {
 // building the jar ---------------------
 jar {
     manifest {
-        attributes 'Main-Class': "sootwrapper.ClusterGenerator",
+        attributes 'Main-Class': "clusterer.ClusterGenerator",
                    'Class-Path': '.',
-                   'Implementation-Title': 'Soot Wrapper',
+                   'Implementation-Title': 'Clusterer',
                    'Implementation-Version': "$version"
     }
     from configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
