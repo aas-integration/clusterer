@@ -12,6 +12,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -107,7 +108,7 @@ public class ClusterGenerator {
 			 */
 			File mapFile = new File(options.classFieldMapFileName);
 
-			Map<SootClass, Set<SootField>> fieldsOfType = new HashMap<SootClass, Set<SootField>>();
+			Map<SootClass, Collection<SootField>> fieldsOfType = new HashMap<SootClass, Collection<SootField>>();
 
 			for (SootClass sc : Scene.v().getApplicationClasses()) {
 				if (sc.resolvingLevel() >= SootClass.SIGNATURES) {
@@ -117,7 +118,7 @@ public class ClusterGenerator {
 							SootClass declClass = ((RefType) sf.getType()).getSootClass();
 							if (declClass.isApplicationClass()) {
 								if (!fieldsOfType.containsKey(declClass)) {
-									fieldsOfType.put(declClass, new LinkedHashSet<SootField>());
+									fieldsOfType.put(declClass, new LinkedList<SootField>());
 								}
 								fieldsOfType.get(declClass).add(sf);
 							}
@@ -170,11 +171,11 @@ public class ClusterGenerator {
 		}
 	}
 
-	private static void writeFieldsToJson(Map<SootClass, Set<SootField>> classToFields, File outfile) {
+	private static void writeFieldsToJson(Map<SootClass, Collection<SootField>> classToFields, File outfile) {
 		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8");) {
 			writer.println("{\n\t\"mappings\": [");
 			boolean first = true;
-			for (Entry<SootClass, Set<SootField>> entry : classToFields.entrySet()) {
+			for (Entry<SootClass, Collection<SootField>> entry : classToFields.entrySet()) {
 				if (first) {
 					first = false;
 				} else {
