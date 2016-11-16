@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +29,10 @@ import org.kohsuke.args4j.CmdLineParser;
 import com.google.common.base.Verify;
 
 import edu.mit.jwi.morph.SimpleStemmer;
+import soot.RefType;
 import soot.Scene;
 import soot.SootClass;
+import soot.SootField;
 import soot.util.ArraySet;
 
 public class ClusterGenerator {
@@ -92,6 +95,41 @@ public class ClusterGenerator {
 			break;
 		}
 		}
+		
+		if (options.classFieldMapFileName!=null) {
+			/*
+			 * For each SootClass that is not a library class,
+			 * create a map entry that maps from this class to
+			 * all fields in the scene that are of that type.
+			 * This is later used to identify clusters of names
+			 * of the same type. E.g.:
+			 * 
+			 * Vector3f -> [Body.position, Material.color, Ray.direction]
+			 */
+			File mapFile = new File(options.classFieldMapFileName);
+			
+			Map<SootClass, Set<SootField>> fieldsOfType = new HashMap<SootClass, Set<SootField>>();
+			
+			for (SootClass sc : Scene.v().getApplicationClasses()) {
+				if (sc.resolvingLevel()>=SootClass.SIGNATURES) {
+					for (SootField sf : sc.getFields()) {
+						//ignore this referneces.
+						if (sf.getType() instanceof RefType && !sf.getName().startsWith("this")) {
+							SootClass declClass = ((RefType)sf.getType()).getSootClass();
+							if (declClass.isApplicationClass()) {
+								if (!fieldsOfType.containsKey(declClass)) {
+									fieldsOfType.put(declClass, new LinkedHashSet<SootField>());
+								}
+								fieldsOfType.get(declClass).add(sf);
+							}
+						}
+					}
+				}
+			}
+			System.out.println("Print field mapping for "+fieldsOfType.size()+ " classes.");
+			writeFieldsToJson(fieldsOfType, mapFile);
+		}
+		
 	}
 
 	private static void writeToJson(Map<String, Set<SootClass>> clusters, File outfile) {
@@ -133,6 +171,46 @@ public class ClusterGenerator {
 		}
 	}
 
+	private static void writeFieldsToJson(Map<SootClass, Set<SootField>> classToFields, File outfile) {
+		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8");) {
+			writer.println("{\n\t\"mappings\": [");
+			boolean first = true;
+			for (Entry<SootClass, Set<SootField>> entry : classToFields.entrySet()) {
+				if (first) {
+					first = false;
+				} else {
+					writer.println(",");
+				}
+				writer.println("\t\t{");
+				writer.println("\t\t \"fields\":[");
+				boolean firstSignature = true;
+				for (SootField sf : entry.getValue()) {
+					if (firstSignature) {
+						firstSignature = false;
+					} else {
+						writer.println(",");
+					}
+					writer.print("\t\t\t\"");
+					writer.print(sf.getName());
+					writer.print("\"");
+				}
+				writer.println("\n\t\t ],");
+				writer.println("\t\t \"class\":[");
+				writer.println("\t\t\t\"" + entry.getKey().getName() + "\"");
+				writer.println("\t\t ]");
+				writer.print("\n\t\t}");
+			}
+			writer.println("\n\t]\n}");
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (UnsupportedEncodingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	
 	/**
 	 * map from FunFactory to "fun;factory" unless super class contains
 	 * "factory", then only map to "fun".

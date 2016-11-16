@@ -46,7 +46,9 @@ public class Options {
 	@Option(name = "-cs", usage = "Clustering strategy between 1 and 4. Default is 3.")
 	public int clusteringStrategy = 3;
 
-		
+	@Option(name = "-cfm", usage = "Produce json map from class name to list of fields of that type (experimental).")
+	public String classFieldMapFileName = null;
+	
 	//================ singleton stuff =================
 	private static Options options;
 
