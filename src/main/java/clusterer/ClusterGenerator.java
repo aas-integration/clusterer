@@ -37,7 +37,6 @@ import soot.util.ArraySet;
 
 public class ClusterGenerator {
 
-
 	public static void main(String[] args) {
 		Options options = Options.v();
 		CmdLineParser parser = new CmdLineParser(options);
@@ -55,12 +54,12 @@ public class ClusterGenerator {
 
 		List<String> directories = options.classDirList;
 
-		if (directories==null || directories.isEmpty()) {
+		if (directories == null || directories.isEmpty()) {
 			System.err.println("No input directories found.");
 			parser.printUsage(System.err);
 			return;
 		}
-		
+
 		SceneLoader.loadFromClassDirs(directories, ".");
 
 		Set<String> dict = getEnglishDict();
@@ -95,8 +94,8 @@ public class ClusterGenerator {
 			break;
 		}
 		}
-		
-		if (options.classFieldMapFileName!=null) {
+
+		if (options.classFieldMapFileName != null) {
 			/*
 			 * For each SootClass that is not a library class,
 			 * create a map entry that maps from this class to
@@ -107,15 +106,15 @@ public class ClusterGenerator {
 			 * Vector3f -> [Body.position, Material.color, Ray.direction]
 			 */
 			File mapFile = new File(options.classFieldMapFileName);
-			
+
 			Map<SootClass, Set<SootField>> fieldsOfType = new HashMap<SootClass, Set<SootField>>();
-			
+
 			for (SootClass sc : Scene.v().getApplicationClasses()) {
-				if (sc.resolvingLevel()>=SootClass.SIGNATURES) {
+				if (sc.resolvingLevel() >= SootClass.SIGNATURES) {
 					for (SootField sf : sc.getFields()) {
-						//ignore this referneces.
+						// ignore this referneces.
 						if (sf.getType() instanceof RefType && !sf.getName().startsWith("this")) {
-							SootClass declClass = ((RefType)sf.getType()).getSootClass();
+							SootClass declClass = ((RefType) sf.getType()).getSootClass();
 							if (declClass.isApplicationClass()) {
 								if (!fieldsOfType.containsKey(declClass)) {
 									fieldsOfType.put(declClass, new LinkedHashSet<SootField>());
@@ -126,10 +125,10 @@ public class ClusterGenerator {
 					}
 				}
 			}
-			System.out.println("Print field mapping for "+fieldsOfType.size()+ " classes.");
+			System.out.println("Print field mapping for " + fieldsOfType.size() + " classes.");
 			writeFieldsToJson(fieldsOfType, mapFile);
 		}
-		
+
 	}
 
 	private static void writeToJson(Map<String, Set<SootClass>> clusters, File outfile) {
@@ -209,8 +208,7 @@ public class ClusterGenerator {
 			e.printStackTrace();
 		}
 	}
-	
-	
+
 	/**
 	 * map from FunFactory to "fun;factory" unless super class contains
 	 * "factory", then only map to "fun".
@@ -457,10 +455,14 @@ public class ClusterGenerator {
 	private static String wordNetStuff(String word) {
 		SimpleStemmer ss = new SimpleStemmer();
 		String shortStem = word.toLowerCase();
-		for (String s : ss.findStems(word, null)) {
-			if (s.length() < shortStem.length()) {
-				shortStem = s.toLowerCase();
+		try {
+			for (String s : ss.findStems(word, null)) {
+				if (s.length() < shortStem.length()) {
+					shortStem = s.toLowerCase();
+				}
 			}
+		} catch (IllegalArgumentException e) {
+			System.err.println("Something bad in " + shortStem);
 		}
 		return shortStem;
 	}
