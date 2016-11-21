@@ -4,9 +4,11 @@
 package clusterer;
 
 import com.google.common.base.Verify;
+import com.google.common.collect.Iterables;
 import com.vesperin.text.Corpus;
 import com.vesperin.text.Introspector;
 import com.vesperin.text.Recommend;
+import com.vesperin.text.Selection;
 import com.vesperin.text.Selection.Word;
 import com.vesperin.text.spelling.StopWords;
 import com.vesperin.text.tokenizers.Tokenizers;
@@ -129,8 +131,8 @@ public class ClusterGenerator {
 
 
 			if (options.wordFieldMapFileName != null) {
-				final WordsTokenizer tokenizer 	= Tokenizers.tokenizeString(StopWords.all());
-				final Corpus<String> corpus 		= Corpus.ofStrings();
+
+				final WordsTokenizer tokenizer 	= Tokenizers.tokenizeString();
 
 				final List<Map<String, List<String>>> result = new ArrayList<>();
 
@@ -138,15 +140,23 @@ public class ClusterGenerator {
 				final Map<String, String> index = new HashMap<>();
 
 				for(Collection<SootField> each : fieldsOfType.values()){
+					final Corpus<String> corpus 		= Corpus.ofStrings();
+
 					each.forEach(e -> {
 						corpus.add(e.getName());
 						index.put(e.getName(), e.getDeclaringClass().getName());
 					});
 
+					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(corpus, tokenizer);
+					if(relevantMaps.isEmpty()) continue;
 
-					final List<Word> 	typicalOnes	= Introspector.typicalWords(corpus, tokenizer);
-					final Set<String>	relevant		= typicalOnes.stream().map(Word::element).collect(Collectors.toSet());
-					final Set<String> universe		= corpus.dataSet();
+					final List<Word> a = Iterables.get(relevantMaps.keySet(), 0);
+					final List<Word> b = Iterables.get(relevantMaps.values(), 0);
+
+					final List<Word> 	wordList	= b.isEmpty() ? a/*frequent words*/ : b/*typical words*/;
+
+					final Set<String>	relevant	= wordList.stream().map(Word::element).collect(Collectors.toSet());
+					final Set<String> universe	= corpus.dataSet();
 
 					final Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(relevant, universe);
 
@@ -280,9 +290,9 @@ public class ClusterGenerator {
 					writer.print("\n\t\t}");
 				}
 
-				writer.println("\n\t]\n}");
 
 			}
+			writer.println("\n\t]\n}");
 		} catch (IOException e) {
 			e.printStackTrace(System.err);
 		}
