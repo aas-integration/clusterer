@@ -134,8 +134,15 @@ public class ClusterGenerator {
 
 				final List<Map<String, List<String>>> result = new ArrayList<>();
 
+				// index: field-name -> declaring class name
+				final Map<String, String> index = new HashMap<>();
+
 				for(Collection<SootField> each : fieldsOfType.values()){
-					each.forEach(e -> corpus.add(e.getName()));
+					each.forEach(e -> {
+						corpus.add(e.getName());
+						index.put(e.getName(), e.getDeclaringClass().getName());
+					});
+
 
 					final List<Word> 	typicalOnes	= Introspector.typicalWords(corpus, tokenizer);
 					final Set<String>	relevant		= typicalOnes.stream().map(Word::element).collect(Collectors.toSet());
@@ -148,7 +155,7 @@ public class ClusterGenerator {
 
 				final File wordMapFile = new File(options.wordFieldMapFileName);
 
-				writeMappingsToJson(result, wordMapFile);
+				writeMappingsToJson(result, index, wordMapFile);
 			}
 
 		}
@@ -233,7 +240,7 @@ public class ClusterGenerator {
 		}
 	}
 
-	private static void writeMappingsToJson(List<Map<String, List<String>>> wordToFields, File outfile) {
+	private static void writeMappingsToJson(List<Map<String, List<String>>> wordToFields, Map<String, String> index, File outfile) {
 		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
 			writer.println("{\n\t\"mappings\": [");
 			boolean first = true;
@@ -258,7 +265,11 @@ public class ClusterGenerator {
 							writer.println(",");
 						}
 						writer.print("\t\t\t\"");
-						writer.print(eachField);
+						if(index.containsKey(eachField)) {
+							writer.print(index.get(eachField) + "." + eachField);
+						} else {
+							writer.print(eachField);
+						}
 						writer.print("\"");
 					}
 
