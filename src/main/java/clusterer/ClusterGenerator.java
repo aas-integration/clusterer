@@ -3,6 +3,25 @@
  */
 package clusterer;
 
+import com.google.common.base.Verify;
+import com.google.common.collect.Iterables;
+import com.vesperin.text.Corpus;
+import com.vesperin.text.Introspector;
+import com.vesperin.text.Recommend;
+import com.vesperin.text.Selection;
+import com.vesperin.text.Selection.Word;
+import com.vesperin.text.spelling.StopWords;
+import com.vesperin.text.tokenizers.Tokenizers;
+import com.vesperin.text.tokenizers.WordsTokenizer;
+import edu.mit.jwi.morph.SimpleStemmer;
+import org.kohsuke.args4j.CmdLineException;
+import org.kohsuke.args4j.CmdLineParser;
+import soot.RefType;
+import soot.Scene;
+import soot.SootClass;
+import soot.SootField;
+import soot.util.ArraySet;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -11,30 +30,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
-
-import org.kohsuke.args4j.CmdLineException;
-import org.kohsuke.args4j.CmdLineParser;
-
-import com.google.common.base.Verify;
-
-import edu.mit.jwi.morph.SimpleStemmer;
-import soot.RefType;
-import soot.Scene;
-import soot.SootClass;
-import soot.SootField;
-import soot.util.ArraySet;
+import java.util.stream.Collectors;
 
 public class ClusterGenerator {
 
@@ -126,8 +124,50 @@ public class ClusterGenerator {
 					}
 				}
 			}
+
 			System.out.println("Print field mapping for " + fieldsOfType.size() + " classes.");
+
 			writeFieldsToJson(fieldsOfType, mapFile);
+
+
+			if (options.wordFieldMapFileName != null) {
+
+				final WordsTokenizer tokenizer 	= Tokenizers.tokenizeString();
+
+				final List<Map<String, List<String>>> result = new ArrayList<>();
+
+				// index: field-name -> declaring class name
+				final Map<String, String> index = new HashMap<>();
+
+				for(Collection<SootField> each : fieldsOfType.values()){
+					final Corpus<String> corpus 		= Corpus.ofStrings();
+
+					each.forEach(e -> {
+						corpus.add(e.getName());
+						index.put(e.getName(), e.getDeclaringClass().getName());
+					});
+
+					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(corpus, tokenizer);
+					if(relevantMaps.isEmpty()) continue;
+
+					final List<Word> a = Iterables.get(relevantMaps.keySet(), 0);
+					final List<Word> b = Iterables.get(relevantMaps.values(), 0);
+
+					final List<Word> 	wordList	= b.isEmpty() ? a/*frequent words*/ : b/*typical words*/;
+
+					final Set<String>	relevant	= wordList.stream().map(Word::element).collect(Collectors.toSet());
+					final Set<String> universe	= corpus.dataSet();
+
+					final Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(relevant, universe);
+
+					result.add(wordFieldsMap);
+				}
+
+				final File wordMapFile = new File(options.wordFieldMapFileName);
+
+				writeMappingsToJson(result, index, wordMapFile);
+			}
+
 		}
 
 	}
@@ -172,7 +212,7 @@ public class ClusterGenerator {
 	}
 
 	private static void writeFieldsToJson(Map<SootClass, Collection<SootField>> classToFields, File outfile) {
-		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8");) {
+		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
 			writer.println("{\n\t\"mappings\": [");
 			boolean first = true;
 			for (Entry<SootClass, Collection<SootField>> entry : classToFields.entrySet()) {
@@ -209,6 +249,55 @@ public class ClusterGenerator {
 			e.printStackTrace();
 		}
 	}
+
+	private static void writeMappingsToJson(List<Map<String, List<String>>> wordToFields, Map<String, String> index, File outfile) {
+		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
+			writer.println("{\n\t\"mappings\": [");
+			boolean first = true;
+			for (Map<String, List<String>> map : wordToFields) {
+				for(String eachKey : map.keySet()){
+					final List<String> eachValue = map.get(eachKey);
+
+					if (first) {
+						first = false;
+					} else {
+						writer.println(",");
+					}
+
+					writer.println("\t\t{");
+					writer.println("\t\t \"fields\":[");
+					boolean firstSignature = true;
+
+					for(String eachField : eachValue){
+						if (firstSignature) {
+							firstSignature = false;
+						} else {
+							writer.println(",");
+						}
+						writer.print("\t\t\t\"");
+						if(index.containsKey(eachField)) {
+							writer.print(index.get(eachField) + "." + eachField);
+						} else {
+							writer.print(eachField);
+						}
+						writer.print("\"");
+					}
+
+					writer.println("\n\t\t ],");
+					writer.println("\t\t \"label\":[");
+					writer.println("\t\t\t\"" + eachKey + "\"");
+					writer.println("\t\t ]");
+					writer.print("\n\t\t}");
+				}
+
+
+			}
+			writer.println("\n\t]\n}");
+		} catch (IOException e) {
+			e.printStackTrace(System.err);
+		}
+	}
+
 
 	/**
 	 * map from FunFactory to "fun;factory" unless super class contains

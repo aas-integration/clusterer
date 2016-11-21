@@ -48,6 +48,9 @@ public class Options {
 
 	@Option(name = "-cfm", usage = "Produce json map from class name to list of fields of that type (experimental).")
 	public String classFieldMapFileName = null;
+
+	@Option(name = "-wfm", usage = "Produce json map from relevant word to list of field names (must be used with -cfm option).")
+	public String wordFieldMapFileName = null;
 	
 	//================ singleton stuff =================
 	private static Options options;
