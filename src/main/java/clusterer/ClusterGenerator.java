@@ -8,9 +8,7 @@ import com.google.common.collect.Iterables;
 import com.vesperin.text.Corpus;
 import com.vesperin.text.Introspector;
 import com.vesperin.text.Recommend;
-import com.vesperin.text.Selection;
 import com.vesperin.text.Selection.Word;
-import com.vesperin.text.spelling.StopWords;
 import com.vesperin.text.tokenizers.Tokenizers;
 import com.vesperin.text.tokenizers.WordsTokenizer;
 import edu.mit.jwi.morph.SimpleStemmer;
@@ -158,7 +156,13 @@ public class ClusterGenerator {
 					final Set<String>	relevant	= wordList.stream().map(Word::element).collect(Collectors.toSet());
 					final Set<String> universe	= corpus.dataSet();
 
-					final Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(relevant, universe);
+					Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(relevant, universe);
+					if(wordFieldsMap.isEmpty()) continue;
+
+					// removes entries where a label is mapped to an empty list (e.g., food -> ())
+					wordFieldsMap = wordFieldsMap.entrySet().stream()
+						.filter(e -> !e.getValue().isEmpty())
+						.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
 
 					result.add(wordFieldsMap);
 				}
