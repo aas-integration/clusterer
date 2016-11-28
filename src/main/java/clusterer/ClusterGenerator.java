@@ -159,9 +159,9 @@ public class ClusterGenerator {
 					Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(relevant, universe);
 					if(wordFieldsMap.isEmpty()) continue;
 
-					// removes entries where a label is mapped to an empty list (e.g., food -> ())
+					// removes entries where a label is mapped to list with less than two elements (e.g., food -> ())
 					wordFieldsMap = wordFieldsMap.entrySet().stream()
-						.filter(e -> !e.getValue().isEmpty())
+						.filter(e -> e.getValue().size()>1)
 						.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
 
 					result.add(wordFieldsMap);
