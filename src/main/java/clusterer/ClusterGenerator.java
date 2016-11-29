@@ -104,20 +104,22 @@ public class ClusterGenerator {
 			 */
 			File mapFile = new File(options.classFieldMapFileName);
 
-			Map<SootClass, Collection<SootField>> fieldsOfType = new HashMap<SootClass, Collection<SootField>>();
+			Map<String, Collection<SootField>> fieldsOfType = new HashMap<String, Collection<SootField>>();
 
 			for (SootClass sc : Scene.v().getApplicationClasses()) {
 				if (sc.resolvingLevel() >= SootClass.SIGNATURES) {
 					for (SootField sf : sc.getFields()) {
 						// ignore this referneces.
-						if (sf.getType() instanceof RefType && !sf.getName().startsWith("this")) {
-							SootClass declClass = ((RefType) sf.getType()).getSootClass();
-							if (declClass.isApplicationClass()) {
-								if (!fieldsOfType.containsKey(declClass)) {
-									fieldsOfType.put(declClass, new LinkedList<SootField>());
-								}
-								fieldsOfType.get(declClass).add(sf);
+						if (!sf.getName().startsWith("this")) {
+							String key = sf.getType().toString();
+							if (sf.getType() instanceof RefType) {
+								SootClass declClass = ((RefType) sf.getType()).getSootClass();
+								key = declClass.toString();
 							}
+							if (!fieldsOfType.containsKey(key)) {
+								fieldsOfType.put(key, new LinkedList<SootField>());
+							}
+							fieldsOfType.get(key).add(sf);
 						}
 					}
 				}
@@ -127,42 +129,45 @@ public class ClusterGenerator {
 
 			writeFieldsToJson(fieldsOfType, mapFile);
 
-
 			if (options.wordFieldMapFileName != null) {
 
-				final WordsTokenizer tokenizer 	= Tokenizers.tokenizeString();
+				final WordsTokenizer tokenizer = Tokenizers.tokenizeString();
 
 				final List<Map<String, List<String>>> result = new ArrayList<>();
 
 				// index: field-name -> declaring class name
 				final Map<String, String> index = new HashMap<>();
 
-				for(Collection<SootField> each : fieldsOfType.values()){
-					final Corpus<String> corpus 		= Corpus.ofStrings();
+				for (Collection<SootField> each : fieldsOfType.values()) {
+					final Corpus<String> corpus = Corpus.ofStrings();
 
 					each.forEach(e -> {
 						corpus.add(e.getName());
 						index.put(e.getName(), e.getDeclaringClass().getName());
 					});
 
-					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(corpus, tokenizer);
-					if(relevantMaps.isEmpty()) continue;
+					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(corpus,
+							tokenizer);
+					if (relevantMaps.isEmpty())
+						continue;
 
 					final List<Word> a = Iterables.get(relevantMaps.keySet(), 0);
 					final List<Word> b = Iterables.get(relevantMaps.values(), 0);
 
-					final List<Word> 	wordList	= b.isEmpty() ? a/*frequent words*/ : b/*typical words*/;
+					final List<Word> wordList = b.isEmpty() ? a
+							/* frequent words */ : b/* typical words */;
 
-					final Set<String>	relevant	= wordList.stream().map(Word::element).collect(Collectors.toSet());
-					final Set<String> universe	= corpus.dataSet();
+					final Set<String> relevant = wordList.stream().map(Word::element).collect(Collectors.toSet());
+					final Set<String> universe = corpus.dataSet();
 
 					Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(relevant, universe);
-					if(wordFieldsMap.isEmpty()) continue;
+					if (wordFieldsMap.isEmpty())
+						continue;
 
-					// removes entries where a label is mapped to list with less than two elements (e.g., food -> ())
-					wordFieldsMap = wordFieldsMap.entrySet().stream()
-						.filter(e -> e.getValue().size()>1)
-						.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+					// removes entries where a label is mapped to list with less
+					// than two elements (e.g., food -> ())
+					wordFieldsMap = wordFieldsMap.entrySet().stream().filter(e -> e.getValue().size() > 1)
+							.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
 
 					result.add(wordFieldsMap);
 				}
@@ -215,11 +220,11 @@ public class ClusterGenerator {
 		}
 	}
 
-	private static void writeFieldsToJson(Map<SootClass, Collection<SootField>> classToFields, File outfile) {
+	private static void writeFieldsToJson(Map<String, Collection<SootField>> classToFields, File outfile) {
 		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
 			writer.println("{\n\t\"mappings\": [");
 			boolean first = true;
-			for (Entry<SootClass, Collection<SootField>> entry : classToFields.entrySet()) {
+			for (Entry<String, Collection<SootField>> entry : classToFields.entrySet()) {
 				if (first) {
 					first = false;
 				} else {
@@ -240,7 +245,7 @@ public class ClusterGenerator {
 				}
 				writer.println("\n\t\t ],");
 				writer.println("\t\t \"class\":[");
-				writer.println("\t\t\t\"" + entry.getKey().getName() + "\"");
+				writer.println("\t\t\t\"" + entry.getKey() + "\"");
 				writer.println("\t\t ]");
 				writer.print("\n\t\t}");
 			}
@@ -254,12 +259,13 @@ public class ClusterGenerator {
 		}
 	}
 
-	private static void writeMappingsToJson(List<Map<String, List<String>>> wordToFields, Map<String, String> index, File outfile) {
+	private static void writeMappingsToJson(List<Map<String, List<String>>> wordToFields, Map<String, String> index,
+			File outfile) {
 		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
 			writer.println("{\n\t\"mappings\": [");
 			boolean first = true;
 			for (Map<String, List<String>> map : wordToFields) {
-				for(String eachKey : map.keySet()){
+				for (String eachKey : map.keySet()) {
 					final List<String> eachValue = map.get(eachKey);
 
 					if (first) {
@@ -272,14 +278,14 @@ public class ClusterGenerator {
 					writer.println("\t\t \"fields\":[");
 					boolean firstSignature = true;
 
-					for(String eachField : eachValue){
+					for (String eachField : eachValue) {
 						if (firstSignature) {
 							firstSignature = false;
 						} else {
 							writer.println(",");
 						}
 						writer.print("\t\t\t\"");
-						if(index.containsKey(eachField)) {
+						if (index.containsKey(eachField)) {
 							writer.print(index.get(eachField) + "." + eachField);
 						} else {
 							writer.print(eachField);
@@ -294,14 +300,12 @@ public class ClusterGenerator {
 					writer.print("\n\t\t}");
 				}
 
-
 			}
 			writer.println("\n\t]\n}");
 		} catch (IOException e) {
 			e.printStackTrace(System.err);
 		}
 	}
-
 
 	/**
 	 * map from FunFactory to "fun;factory" unless super class contains
