@@ -70,6 +70,10 @@ public class ClusterGenerator {
 		Verify.verify(dict.contains("cylinder"));
 		Verify.verify(dict.contains("capsule"));
 
+		if(Options.v().verbose){ Introspector.enableMonitor(); } else {
+			Introspector.disableMonitor();
+		}
+
 		Set<String> ignoreWords = new HashSet<String>(Arrays.asList(new String[] { "package" }));
 
 		File outFile = new File(options.outFileName);
@@ -138,6 +142,10 @@ public class ClusterGenerator {
 				final Map<String, String> index = new HashMap<>();
 
 				for(Collection<SootField> each : fieldsOfType.values()){
+					final Set<String> allFields = each.stream()
+						.map(SootField::getName)
+						.collect(Collectors.toSet());
+
 					final Corpus<String> corpus 		= Corpus.ofStrings();
 
 					each.forEach(e -> {
@@ -145,7 +153,10 @@ public class ClusterGenerator {
 						index.put(e.getName(), e.getDeclaringClass().getName());
 					});
 
-					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(corpus, tokenizer);
+					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(
+						corpus, tokenizer
+					);
+
 					if(relevantMaps.isEmpty()) continue;
 
 					final List<Word> a = Iterables.get(relevantMaps.keySet(), 0);
@@ -153,23 +164,37 @@ public class ClusterGenerator {
 
 					final List<Word> 	wordList	= b.isEmpty() ? a/*frequent words*/ : b/*typical words*/;
 
-					final Set<String>	relevant	= wordList.stream().map(Word::element).collect(Collectors.toSet());
+					final Set<String>	relevant	= wordList.stream()
+						.map(Word::element)
+						.collect(Collectors.toSet());
+
 					final Set<String> universe	= corpus.dataSet();
 
-					Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(relevant, universe);
+					Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(
+						relevant, universe
+					);
+
 					if(wordFieldsMap.isEmpty()) continue;
 
 					// removes entries where a label is mapped to an empty list (e.g., food -> ())
 					wordFieldsMap = wordFieldsMap.entrySet().stream()
-						.filter(e -> !e.getValue().isEmpty())
+						.filter(e -> !e.getValue().isEmpty()) // pick entries with non empty values
+						.filter(e -> e.getValue().size() > 1) // pick entries with values size > 1
+						.filter(e -> e.getValue().containsAll(allFields)) // pick entries that don't contain ALL available fields
 						.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+
+					if(wordFieldsMap.isEmpty()) continue;
 
 					result.add(wordFieldsMap);
 				}
 
-				final File wordMapFile = new File(options.wordFieldMapFileName);
+				if(!result.isEmpty()){
+					final File wordMapFile = new File(options.wordFieldMapFileName);
 
-				writeMappingsToJson(result, index, wordMapFile);
+					writeMappingsToJson(result, index, wordMapFile);
+				} else {
+					System.out.println("Warning: Unable to produce any clusters!");
+				}
 			}
 
 		}
