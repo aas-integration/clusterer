@@ -1,5 +1,30 @@
 package clusterer;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.kohsuke.args4j.CmdLineException;
+import org.kohsuke.args4j.CmdLineParser;
+
 import com.google.common.base.Verify;
 import com.google.common.collect.Iterables;
 import com.vesperin.text.Corpus;
@@ -9,26 +34,15 @@ import com.vesperin.text.Selection.Word;
 import com.vesperin.text.spi.BasicExecutionMonitor;
 import com.vesperin.text.tokenizers.Tokenizers;
 import com.vesperin.text.tokenizers.WordsTokenizer;
+
 import edu.mit.jwi.morph.SimpleStemmer;
-import org.kohsuke.args4j.CmdLineException;
-import org.kohsuke.args4j.CmdLineParser;
 import soot.RefType;
 import soot.Scene;
 import soot.SootClass;
 import soot.SootField;
+import soot.SootMethod;
+import soot.Type;
 import soot.util.ArraySet;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
-import java.util.*;
-import java.util.Map.Entry;
-import java.util.stream.Collectors;
 
 public class ClusterGenerator {
 
@@ -94,6 +108,66 @@ public class ClusterGenerator {
 		}
 		}
 
+		
+		if (options.classInfoFileName !=null) {
+			try (PrintWriter writer = new PrintWriter(new File(options.classInfoFileName), "UTF-8")) {
+				writer.println("{\"classinfo\": [");
+				String comma1 = "";				
+				for (SootClass sc : Scene.v().getApplicationClasses()) {
+					if (sc.resolvingLevel() < SootClass.SIGNATURES) continue;
+					writer.print(comma1);
+					writer.println("  {\"name\" : \"" + sc.getName() +"\",");
+					
+					if (sc.hasSuperclass()) {
+						writer.println("\t\"super\" : \"" + sc.getSuperclass() +"\",");
+					}
+					
+					writer.print("\t\"interfaces\" : [");
+					String comma2="";
+					for (SootClass interf : sc.getInterfaces()) {
+						writer.print(comma2);
+						writer.print("\""+interf.getName()+"\"");
+						comma2 = ",\n\t\t";
+					}
+					writer.println("],");
+
+					
+					writer.print("\t\"fields\" : [");
+					comma2="";
+					for (SootField sf : sc.getFields()) {
+						writer.print(comma2);
+						writer.print("{\"name\" : ");
+						writer.print("\""+sf.getName()+"\",\n\t\t");
+						writer.print("\"type\" : ");
+						writer.print("\""+sf.getType()+"\"}");
+
+						comma2 = ",\n\t\t";
+					}
+					writer.println("],");
+
+					writer.println("\t\"methods\" : [");
+					comma2="";
+					for (SootMethod sm : sc.getMethods()) {
+						writer.print(comma2);
+						sootMethodToJson(sm, writer, "\t\t");
+						comma2 = ",\n\t\t";
+					}
+					writer.println("]");
+
+					writer.println("}");
+					comma1 = ",\n";
+				}				
+				writer.println("]}");
+			} catch (FileNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} 
+		}
+	
+		
 		if (options.classFieldMapFileName != null) {
 			/*
 			 * For each SootClass that is not a library class,
@@ -200,6 +274,21 @@ public class ClusterGenerator {
 
 	}
 
+	private static void sootMethodToJson(SootMethod sm, PrintWriter pw, final String indent) {
+		pw.println(indent+"{\"methodname\" : \"" + sm.getSignature()+"\",");
+		pw.println(indent+"\"returntype\" : \"" + sm.getReturnType()+"\",");
+		
+		pw.print(indent+"\"paramtypes\" : [" );
+		String comma = "";
+		for (Type t : sm.getParameterTypes()) {
+			pw.print(comma);
+			pw.print(indent+"\t\"" + t+"\"");
+			comma = ",\n";
+		}
+		pw.println("]");
+		pw.print(indent+"}");
+	}
+	
 	private static void writeToJson(Map<String, Set<SootClass>> clusters, File outfile) {
 		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8");) {
 			writer.println("{\n\t\"mappings\": [");

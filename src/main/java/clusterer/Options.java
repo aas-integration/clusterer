@@ -32,6 +32,10 @@ import org.kohsuke.args4j.spi.StringArrayOptionHandler;
  */
 public class Options {
 	
+	@Option(name = "-classinfo", usage = "Print out a json file that contains info about all classes including fields and subtypes.")
+	public String classInfoFileName = "class_info.json";
+	
+	
 	@Option(name = "-dirs", handler = StringArrayOptionHandler.class, required = true,
 			usage = "List of directories of classdirs to be passed to soot.")
 	public List<String> classDirList = new LinkedList<String>();
