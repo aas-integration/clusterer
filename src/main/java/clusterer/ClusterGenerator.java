@@ -1,6 +1,3 @@
-/**
- * 
- */
 package clusterer;
 
 import java.io.BufferedReader;
@@ -34,6 +31,7 @@ import com.vesperin.text.Corpus;
 import com.vesperin.text.Introspector;
 import com.vesperin.text.Recommend;
 import com.vesperin.text.Selection.Word;
+import com.vesperin.text.spi.BasicExecutionMonitor;
 import com.vesperin.text.tokenizers.Tokenizers;
 import com.vesperin.text.tokenizers.WordsTokenizer;
 
@@ -84,8 +82,8 @@ public class ClusterGenerator {
 		Verify.verify(dict.contains("cylinder"));
 		Verify.verify(dict.contains("capsule"));
 
-		if(Options.v().verbose){ Introspector.enableMonitor(); } else {
-			Introspector.disableMonitor();
+		if(Options.v().verbose){ BasicExecutionMonitor.get().enable(); } else {
+			BasicExecutionMonitor.get().disable();
 		}
 
 		Set<String> ignoreWords = new HashSet<String>(Arrays.asList(new String[] { "package" }));
@@ -228,7 +226,7 @@ public class ClusterGenerator {
 						index.put(e.getName(), e.getDeclaringClass().getName());
 					});
 
-					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(
+					final Map<List<Word>, List<Word>> relevantMaps = Introspector.buildWordsMap(
 						corpus, tokenizer
 					);
 
