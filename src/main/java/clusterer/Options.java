@@ -55,6 +55,10 @@ public class Options {
 
 	@Option(name = "-wfm", usage = "Produce json map from relevant word to list of field names (must be used with -cfm option).")
 	public String wordFieldMapFileName = null;
+
+	@Option(name = "-v", usage = "Logging enabled.")
+	public boolean verbose = false;
+
 	
 	//================ singleton stuff =================
 	private static Options options;

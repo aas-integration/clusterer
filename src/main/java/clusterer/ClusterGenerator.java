@@ -84,6 +84,10 @@ public class ClusterGenerator {
 		Verify.verify(dict.contains("cylinder"));
 		Verify.verify(dict.contains("capsule"));
 
+		if(Options.v().verbose){ Introspector.enableMonitor(); } else {
+			Introspector.disableMonitor();
+		}
+
 		Set<String> ignoreWords = new HashSet<String>(Arrays.asList(new String[] { "package" }));
 
 		File outFile = new File(options.outFileName);
@@ -212,43 +216,60 @@ public class ClusterGenerator {
 				// index: field-name -> declaring class name
 				final Map<String, String> index = new HashMap<>();
 
-				for (Collection<SootField> each : fieldsOfType.values()) {
-					final Corpus<String> corpus = Corpus.ofStrings();
+				for(Collection<SootField> each : fieldsOfType.values()){
+					final Set<String> allFields = each.stream()
+						.map(SootField::getName)
+						.collect(Collectors.toSet());
+
+					final Corpus<String> corpus 		= Corpus.ofStrings();
 
 					each.forEach(e -> {
 						corpus.add(e.getName());
 						index.put(e.getName(), e.getDeclaringClass().getName());
 					});
 
-					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(corpus,
-							tokenizer);
-					if (relevantMaps.isEmpty())
-						continue;
+					final Map<List<Word>, List<Word>> relevantMaps = Introspector.generateRelevantMapping(
+						corpus, tokenizer
+					);
+
+					if(relevantMaps.isEmpty()) continue;
 
 					final List<Word> a = Iterables.get(relevantMaps.keySet(), 0);
 					final List<Word> b = Iterables.get(relevantMaps.values(), 0);
 
-					final List<Word> wordList = b.isEmpty() ? a
-							/* frequent words */ : b/* typical words */;
+					final List<Word> 	wordList	= b.isEmpty() ? a/*frequent words*/ : b/*typical words*/;
 
-					final Set<String> relevant = wordList.stream().map(Word::element).collect(Collectors.toSet());
-					final Set<String> universe = corpus.dataSet();
+					final Set<String>	relevant	= wordList.stream()
+						.map(Word::element)
+						.collect(Collectors.toSet());
 
-					Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(relevant, universe);
-					if (wordFieldsMap.isEmpty())
-						continue;
+					final Set<String> universe	= corpus.dataSet();
 
-					// removes entries where a label is mapped to list with less
-					// than two elements (e.g., food -> ())
-					wordFieldsMap = wordFieldsMap.entrySet().stream().filter(e -> e.getValue().size() > 1)
-							.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+					Map<String, List<String>> wordFieldsMap = Recommend.mappingOfLabels(
+						relevant, universe
+					);
+
+					if(wordFieldsMap.isEmpty()) continue;
+
+					// removes entries where a label is mapped to an empty list (e.g., food -> ())
+					wordFieldsMap = wordFieldsMap.entrySet().stream()
+						.filter(e -> !e.getValue().isEmpty()) // pick entries with non empty values
+						.filter(e -> e.getValue().size() > 1) // pick entries with values size > 1
+						.filter(e -> e.getValue().containsAll(allFields)) // pick entries that don't contain ALL available fields
+						.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+
+					if(wordFieldsMap.isEmpty()) continue;
 
 					result.add(wordFieldsMap);
 				}
 
-				final File wordMapFile = new File(options.wordFieldMapFileName);
+				if(!result.isEmpty()){
+					final File wordMapFile = new File(options.wordFieldMapFileName);
 
-				writeMappingsToJson(result, index, wordMapFile);
+					writeMappingsToJson(result, index, wordMapFile);
+				} else {
+					System.out.println("Warning: Unable to produce any clusters!");
+				}
 			}
 
 		}
@@ -348,13 +369,12 @@ public class ClusterGenerator {
 		}
 	}
 
-	private static void writeMappingsToJson(List<Map<String, List<String>>> wordToFields, Map<String, String> index,
-			File outfile) {
+	private static void writeMappingsToJson(List<Map<String, List<String>>> wordToFields, Map<String, String> index, File outfile) {
 		try (PrintWriter writer = new PrintWriter(outfile, "UTF-8")) {
 			writer.println("{\n\t\"mappings\": [");
 			boolean first = true;
 			for (Map<String, List<String>> map : wordToFields) {
-				for (String eachKey : map.keySet()) {
+				for(String eachKey : map.keySet()){
 					final List<String> eachValue = map.get(eachKey);
 
 					if (first) {
