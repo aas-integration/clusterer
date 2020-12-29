@@ -4,10 +4,10 @@ if (!lib_dir.exists()) {
 }
 
 def soot_jar = new File('lib/soot-trunk.jar')
-if (!soot_jar.exists()) {	
-	println "downloading soot"	
-    new URL('https://ssebuild.cased.de/nightly/soot/lib/soot-trunk.jar').withInputStream{ i -> soot_jar.withOutputStream{ it << i }}
-}
+//if (!soot_jar.exists()) {
+//	println "downloading soot"
+//    new URL('https://ssebuild.cased.de/nightly/soot/lib/soot-trunk.jar').withInputStream{ i -> soot_jar.withOutputStream{ it << i }}
+//}
 
 
 repositories {
