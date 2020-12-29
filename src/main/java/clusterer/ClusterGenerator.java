@@ -1,30 +1,5 @@
 package clusterer;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-import org.kohsuke.args4j.CmdLineException;
-import org.kohsuke.args4j.CmdLineParser;
-
 import com.google.common.base.Verify;
 import com.google.common.collect.Iterables;
 import com.vesperin.text.Corpus;
@@ -34,17 +9,23 @@ import com.vesperin.text.Selection.Word;
 import com.vesperin.text.spi.BasicExecutionMonitor;
 import com.vesperin.text.tokenizers.Tokenizers;
 import com.vesperin.text.tokenizers.WordsTokenizer;
-
 import edu.mit.jwi.morph.SimpleStemmer;
-import soot.RefType;
-import soot.Scene;
-import soot.SootClass;
-import soot.SootField;
-import soot.SootMethod;
-import soot.Type;
+import org.kohsuke.args4j.CmdLineException;
+import org.kohsuke.args4j.CmdLineParser;
+import soot.*;
 import soot.util.ArraySet;
 
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
 public class ClusterGenerator {
+
+	private static final String BLANK = "";
 
 	public static void main(String[] args) {
 		Options options = Options.v();
@@ -104,6 +85,10 @@ public class ClusterGenerator {
 		}
 		case 4: {
 			writeToJson(strategy4(ignoreWords, dict), outFile);
+			break;
+		}
+		case 5: {
+			writeToJson(strategy5(ignoreWords, dict), outFile);
 			break;
 		}
 		}
@@ -427,7 +412,7 @@ public class ClusterGenerator {
 
 		for (SootClass sc : getAllClasses()) {
 
-			if (sc.getJavaStyleName().contains("$")) {
+			if (innerOrStaticNested(sc)) {
 				// ignore nested classes
 				continue;
 			}
@@ -480,12 +465,145 @@ public class ClusterGenerator {
 		return allClasses;
 	}
 
-	private static Map<String, Set<SootClass>> strategy3(Set<String> ignoreWords, Set<String> dict) {
-		Map<String, Set<SootClass>> clusters = new LinkedHashMap<String, Set<SootClass>>();
+	private static Map<String, Set<SootClass>> strategy5(Set<String> ignoreWords, Set<String> dict) {
+		SortedMap<String, Set<SootClass>> clusters = new TreeMap<>();
 
 		for (SootClass sc : getAllClasses()) {
 
-			if (sc.getJavaStyleName().contains("$")) {
+			if (innerOrStaticNested(sc)) {
+				// ignore nested classes
+				continue;
+			}
+
+			List<String> stemmedWords = splitIntoWords(sc.getJavaStyleName(), dict);
+
+			if (sc.resolvingLevel() >= SootClass.HIERARCHY && sc.hasSuperclass()
+					&& sc.getSuperclass().isApplicationClass()) {
+				List<String> stemmedParentWords = splitIntoWords(sc.getSuperclass().getJavaStyleName(), dict);
+				int sharedWords = 0;
+				for (String s : stemmedParentWords) {
+					if (stemmedWords.contains(s)) {
+						sharedWords++;
+					}
+				}
+				if (sharedWords > 0) {
+					stemmedWords.retainAll(stemmedParentWords);
+				}
+			}
+
+			stemmedWords.removeAll(ignoreWords);
+			if (!stemmedWords.isEmpty()) {
+				final String key = makeKey(stemmedWords);
+				final String candKey = resolveKey(key, stemmedWords, clusters);
+
+				if (!clusters.containsKey(candKey)) {
+					clusters.put(key, new ArraySet<>());
+				}
+
+				clusters.get(candKey).add(sc);
+
+			}
+		}
+
+		System.out.println("Total clusters: " + clusters.size());
+
+		List<String> toRemove = new LinkedList<>();
+		for (Entry<String, Set<SootClass>> entry : clusters.entrySet()) {
+			if (entry.getValue().size() <= 1) {
+				toRemove.add(entry.getKey());
+			}
+		}
+		for (String s : toRemove) {
+			clusters.remove(s);
+		}
+
+		System.out.println("Total clusters >1: " + clusters.size());
+
+		toRemove = new LinkedList<>();
+		Map<String, Set<SootClass>> errorAndExceptions = new HashMap<>();
+		for (Entry<String, Set<SootClass>> entry : clusters.entrySet()) {
+			if (entry.getKey().startsWith("exception;")){
+				if (!errorAndExceptions.containsKey("exception;")){
+					errorAndExceptions.put("exception;", new HashSet<>());
+				}
+
+				errorAndExceptions.get("exception;").addAll(entry.getValue());
+				toRemove.add(entry.getKey());
+			} else if (entry.getKey().startsWith("error;")){
+				if (!errorAndExceptions.containsKey("error;")){
+					errorAndExceptions.put("error;", new HashSet<>());
+				}
+
+				errorAndExceptions.get("error;").addAll(entry.getValue());
+				toRemove.add(entry.getKey());
+			}
+		}
+
+		for (String s : toRemove) {
+			clusters.remove(s);
+		}
+
+		clusters.putAll(errorAndExceptions);
+
+		System.out.println("Total clusters (after exception coalescing): " + clusters.size());
+
+		int ttword = 0;
+		for (Entry<String, Set<SootClass>> entry : clusters.entrySet()) {
+			ttword += entry.getValue().size();
+		}
+		System.out.println("Relabeled terms : " + ttword);
+		return clusters;
+	}
+
+	static boolean innerOrStaticNested(SootClass sc){
+		return sc.getJavaStyleName().contains("$");
+	}
+
+	@SuppressWarnings("unchecked")
+	static <T> Stream<T> reverse(Stream<T> input) {
+		Object[] temp = input.toArray();
+		return (Stream<T>) IntStream.range(0, temp.length)
+				.mapToObj(i -> temp[temp.length - i - 1]);
+	}
+
+
+	static String resolveKey(String key, List<String> stemmedWords, SortedMap<String, Set<SootClass>> clusters){
+		List<String> reversed = reverse(stemmedWords.stream()).collect(Collectors.toList());
+
+		double longest = 0.0d;
+		String candKey = BLANK;
+		Set<Map.Entry<String, Set<SootClass>>> matches = searchByPrefix(clusters, reversed.get(0)).entrySet();
+		for(Map.Entry<String, Set<SootClass>> entry : matches){
+			if (BLANK.equals(candKey)){
+				candKey = entry.getKey();
+				longest = RatcliffObershelp.similarity(key, candKey);
+			} else {
+				double newLongest = RatcliffObershelp.similarity(key, entry.getKey());
+				if (Double.compare(newLongest, longest) > 0){
+					candKey = entry.getKey();
+					longest = newLongest;
+				}
+			}
+		}
+
+		if (BLANK.equals(candKey)){
+			candKey = key;
+		} else {
+			if (Double.compare(longest, 0.6) <= 0){
+				candKey = key;
+			}
+		}
+
+		return candKey;
+	}
+
+
+	private static Map<String, Set<SootClass>> strategy3(Set<String> ignoreWords, Set<String> dict) {
+		SortedMap<String, Set<SootClass>> clusters = new TreeMap<>();
+
+		for (SootClass sc : getAllClasses()) {
+
+			if (innerOrStaticNested(sc)) {
 				// ignore nested classes
 				continue;
 			}
@@ -510,8 +628,9 @@ public class ClusterGenerator {
 			if (!stemmedWords.isEmpty()) {
 				final String key = makeKey(stemmedWords);
 				if (!clusters.containsKey(key)) {
-					clusters.put(key, new ArraySet<SootClass>());
+					clusters.put(key, new ArraySet<>());
 				}
+
 				clusters.get(key).add(sc);
 			}
 		}
@@ -608,7 +727,7 @@ public class ClusterGenerator {
 
 		for (SootClass sc : getAllClasses()) {
 
-			if (sc.getJavaStyleName().contains("$")) {
+			if (innerOrStaticNested(sc)) {
 				// ignore nested classes
 				continue;
 			}
@@ -647,8 +766,11 @@ public class ClusterGenerator {
 	}
 
 	private static String makeKey(List<String> words) {
-		List<String> stemmedWords = new LinkedList<String>(words);
-		Collections.sort(stemmedWords);
+		List<String> stemmedWords = new LinkedList<>(words);
+		if (!stemmedWords.isEmpty()){
+			stemmedWords = reverse(stemmedWords.stream()).collect(Collectors.toList());
+		}
+
 		StringBuilder sb = new StringBuilder();
 		for (String s : stemmedWords) {
 			sb.append(s);
@@ -674,7 +796,7 @@ public class ClusterGenerator {
 
 	private static List<String> splitIntoWords(final String identifierName, Set<String> dict) {
 		// split the came case first
-		List<String> words = new LinkedList<String>();
+		List<String> words = new LinkedList<>();
 		for (String word : identifierName.split("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])")) {
 			String lowerCaseWord = word.toLowerCase();
 			String longestWordFwd = null;
@@ -699,8 +821,8 @@ public class ClusterGenerator {
 	private static Set<String> getEnglishDict() {
 		final File unixDict = new File("/usr/share/dict/words");
 		Set<String> words = new HashSet<String>();
-		try (BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(unixDict), "UTF8"));) {
-			String line = null;
+		try (BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(unixDict), StandardCharsets.UTF_8));) {
+			String line;
 			while ((line = in.readLine()) != null) {
 				words.add(line.replace(System.getProperty("line.separator"), "").toLowerCase());
 			}
@@ -710,7 +832,7 @@ public class ClusterGenerator {
 		return words;
 	}
 
-	private static Map<String, String> synmap = new HashMap<String, String>();
+	private static Map<String, String> synmap = new HashMap<>();
 
 	/**
 	 * Gets all synonyms from wordnet, sorts them alphabetically, and picks the
@@ -739,4 +861,15 @@ public class ClusterGenerator {
 		}
 		return synmap.get(word);
 	}
+
+	public static <V> SortedMap<String, V> searchByPrefix(SortedMap<String,V> baseMap, String prefix) {
+		if(prefix.length() > 0) {
+			char nextLetter = (char) (prefix.charAt(prefix.length() - 1) + 1);
+			String end = prefix.substring(0, prefix.length() - 1) + nextLetter;
+			return baseMap.subMap(prefix, end);
+		}
+		return baseMap;
+	}
+
+
 }
