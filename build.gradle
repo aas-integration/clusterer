@@ -26,6 +26,7 @@ sourceCompatibility = 1.8
 dependencies {
 	compile 'args4j:args4j:2.32'
 	compile fileTree(dir: 'lib', include: '*.jar')
+    compile group: 'org.apache.opennlp', name: 'opennlp-tools', version: '1.9.3'
     testCompile 'junit:junit:4.12'
 }
 

@@ -9,7 +9,7 @@ import com.vesperin.text.Selection.Word;
 import com.vesperin.text.spi.BasicExecutionMonitor;
 import com.vesperin.text.tokenizers.Tokenizers;
 import com.vesperin.text.tokenizers.WordsTokenizer;
-import edu.mit.jwi.morph.SimpleStemmer;
+import opennlp.tools.stemmer.snowball.SnowballStemmer;
 import org.kohsuke.args4j.CmdLineException;
 import org.kohsuke.args4j.CmdLineParser;
 import soot.*;
@@ -475,6 +475,10 @@ public class ClusterGenerator {
 				continue;
 			}
 
+			if (sc.getJavaStyleName().contains("Enumeration") || sc.getJavaStyleName().contains("Decompositor")){
+				System.out.println("What?");
+			}
+
 			List<String> stemmedWords = splitIntoWords(sc.getJavaStyleName(), dict);
 
 			if (sc.resolvingLevel() >= SootClass.HIERARCHY && sc.hasSuperclass()
@@ -572,7 +576,11 @@ public class ClusterGenerator {
 
 		double longest = 0.0d;
 		String candKey = BLANK;
-		Set<Map.Entry<String, Set<SootClass>>> matches = searchByPrefix(clusters, reversed.get(0)).entrySet();
+		String keyword = reversed.get(0);
+		if (keyword.length() > 8){
+			keyword = keyword.substring(0, 8);
+		}
+		Set<Map.Entry<String, Set<SootClass>>> matches = searchByPrefix(clusters, keyword).entrySet();
 		for(Map.Entry<String, Set<SootClass>> entry : matches){
 			if (BLANK.equals(candKey)){
 				candKey = entry.getKey();
@@ -780,13 +788,12 @@ public class ClusterGenerator {
 	}
 
 	private static String wordNetStuff(String word) {
-		SimpleStemmer ss = new SimpleStemmer();
+		SnowballStemmer stemmer = new SnowballStemmer(SnowballStemmer.ALGORITHM.ENGLISH);
 		String shortStem = word.toLowerCase();
 		try {
-			for (String s : ss.findStems(word, null)) {
-				if (s.length() < shortStem.length()) {
-					shortStem = s.toLowerCase();
-				}
+			String stemmedWord = stemmer.stem(word).toString();
+			if (stemmedWord.length() < shortStem.length()) {
+				shortStem = stemmedWord.toLowerCase();
 			}
 		} catch (IllegalArgumentException e) {
 			System.err.println("Something bad in " + shortStem);
@@ -811,7 +818,7 @@ public class ClusterGenerator {
 			if (longestWordFwd == null) {
 				longestWordFwd = lowerCaseWord;
 			}
-			wordNetStuff(longestWordFwd);
+			longestWordFwd = wordNetStuff(longestWordFwd);
 			words.add(longestWordFwd);
 		}
 
